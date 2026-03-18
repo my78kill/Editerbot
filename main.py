@@ -8,7 +8,6 @@ app = Flask(__name__)
 def home():
     return "Bot is running!"
 
-# 🔥 IMPORTANT: background task start
 @app.before_serving
 async def startup():
     asyncio.create_task(bot_main())
