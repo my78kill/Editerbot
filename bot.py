@@ -12,7 +12,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 
 detector = NudeDetector()
 
-# ⏳ Auto delete function
+# ⏳ Auto delete
 async def auto_delete(message, delay):
     await asyncio.sleep(delay)
     try:
@@ -20,7 +20,8 @@ async def auto_delete(message, delay):
     except:
         pass
 
-# 👋 START COMMAND (ENGLISH WELCOME)
+
+# 👋 START COMMAND
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     add_user(user.id)
@@ -40,7 +41,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     asyncio.create_task(auto_delete(msg, 30))
 
 
-# 🖼️ PHOTO HANDLER (NSFW DETECTION)
+# 🖼️ PHOTO HANDLER
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     user = msg.from_user
@@ -58,7 +59,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         result = []
 
-    # 🔞 If NSFW detected
     if result:
         try:
             await msg.delete()
@@ -76,25 +76,23 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         asyncio.create_task(auto_delete(warn_msg, 10))
 
-        # 🚫 Ban after 3 warnings
         if warnings >= 3:
             try:
                 await msg.chat.ban_member(user.id)
                 ban_msg = await msg.chat.send_message(
-                    f"🚫 {user.first_name} has been banned (Too many NSFW violations)"
+                    f"🚫 {user.first_name} has been banned (Too many violations)"
                 )
                 asyncio.create_task(auto_delete(ban_msg, 10))
             except:
                 pass
 
-    # 🧹 delete local file
     try:
         os.remove(file_path)
     except:
         pass
 
 
-# ✏️ EDITED MESSAGE HANDLER
+# ✏️ EDITED MESSAGE
 async def edited_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.edited_message
 
@@ -105,37 +103,28 @@ async def edited_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML"
         )
 
-        asyncio.create_task(auto_delete(msg, 1800))   # 30 min
+        asyncio.create_task(auto_delete(msg, 1800))
         asyncio.create_task(auto_delete(warn, 20))
-
     except:
         pass
 
 
-# 💬 OPTIONAL: NORMAL MESSAGE CLEAN (BOT MESSAGES AUTO DELETE)
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message
-
-    # Agar bot reply kare future me, to auto delete kar sake
-    # (abhi placeholder hai)
-    pass
-
-
-# ▶️ RUN BOT
-def run_bot():
+# ▶️ MAIN FUNCTION (IMPORTANT FIX)
+async def main():
     app = Application.builder().token(TOKEN).build()
 
-    # Commands
     app.add_handler(CommandHandler("start", start))
-
-    # Photo (NSFW check)
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-
-    # Edited messages
     app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, edited_message))
 
-    # Normal messages (optional)
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text))
+    print("✅ Bot running...")
 
-    print("✅ Bot is running...")
-    app.run_polling()
+    await app.initialize()
+    await app.start()
+    await app.bot.initialize()   # extra safety
+
+    # 🔥 THIS IS THE FIX (NO run_polling)
+    await app.updater.start_polling()
+
+    # keep alive
+    await asyncio.Event().wait()
