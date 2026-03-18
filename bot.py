@@ -1,16 +1,18 @@
 import asyncio
 import os
+import requests
 from telegram import Update
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     ContextTypes, filters
 )
-from nudenet import NudeDetector
 from database import add_user, add_warning, get_warnings
 
 TOKEN = os.getenv("BOT_TOKEN")
 
-detector = NudeDetector()
+API_USER = os.getenv("API_USER")
+API_SECRET = os.getenv("API_SECRET")
+
 
 # ⏳ Auto delete
 async def auto_delete(message, delay):
@@ -21,7 +23,7 @@ async def auto_delete(message, delay):
         pass
 
 
-# 👋 START COMMAND
+# 👋 START
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     add_user(user.id)
@@ -32,16 +34,38 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✨ What I do:\n"
         "• 🚫 Remove NSFW images instantly\n"
         "• ✏️ Monitor edited messages\n"
-        "• 🧹 Auto-clean the chat\n\n"
-        "➕ Add me to your group\n"
-        "🔑 Give me admin (delete messages permission)\n\n"
-        "Sit back and let me handle the mess 😎"
+        "• 🧹 Keep chat clean\n\n"
+        "Add me to group & give admin 😎"
     )
 
     asyncio.create_task(auto_delete(msg, 30))
 
 
-# 🖼️ PHOTO HANDLER
+# 🖼️ NSFW CHECK FUNCTION
+def check_nsfw(image_path):
+    url = "https://api.sightengine.com/1.0/check.json"
+
+    files = {'media': open(image_path, 'rb')}
+    data = {
+        'models': 'nudity-2.0',
+        'api_user': API_USER,
+        'api_secret': API_SECRET
+    }
+
+    r = requests.post(url, files=files, data=data)
+    result = r.json()
+
+    try:
+        nudity = result["nudity"]
+        if nudity["sexual_activity"] > 0.5 or nudity["sexual_display"] > 0.5:
+            return True
+    except:
+        pass
+
+    return False
+
+
+# 📸 PHOTO HANDLER
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     user = msg.from_user
@@ -54,12 +78,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_path = f"{user.id}.jpg"
     await file.download_to_drive(file_path)
 
-    try:
-        result = detector.detect(file_path)
-    except:
-        result = []
+    is_nsfw = check_nsfw(file_path)
 
-    if result:
+    if is_nsfw:
         try:
             await msg.delete()
         except:
@@ -69,7 +90,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         warnings = get_warnings(user.id)
 
         warn_msg = await msg.chat.send_message(
-            f"{user.mention_html()} 🚫 NSFW content is not allowed!\n"
+            f"{user.mention_html()} 🚫 NSFW content not allowed!\n"
             f"⚠️ Warnings: {warnings}/3",
             parse_mode="HTML"
         )
@@ -79,37 +100,27 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if warnings >= 3:
             try:
                 await msg.chat.ban_member(user.id)
-                ban_msg = await msg.chat.send_message(
-                    f"🚫 {user.first_name} has been banned (Too many violations)"
-                )
-                asyncio.create_task(auto_delete(ban_msg, 10))
             except:
                 pass
 
-    try:
-        os.remove(file_path)
-    except:
-        pass
+    os.remove(file_path)
 
 
 # ✏️ EDITED MESSAGE
 async def edited_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.edited_message
 
-    try:
-        warn = await msg.chat.send_message(
-            f"{msg.from_user.mention_html()} edited a message.\n"
-            f"⏳ This message will be deleted in 30 minutes.",
-            parse_mode="HTML"
-        )
+    warn = await msg.chat.send_message(
+        f"{msg.from_user.mention_html()} edited a message.\n"
+        f"⏳ Will be deleted in 30 mins.",
+        parse_mode="HTML"
+    )
 
-        asyncio.create_task(auto_delete(msg, 1800))
-        asyncio.create_task(auto_delete(warn, 20))
-    except:
-        pass
+    asyncio.create_task(auto_delete(msg, 1800))
+    asyncio.create_task(auto_delete(warn, 20))
 
 
-# ▶️ MAIN FUNCTION (IMPORTANT FIX)
+# ▶️ MAIN
 async def main():
     app = Application.builder().token(TOKEN).build()
 
@@ -119,11 +130,4 @@ async def main():
 
     print("✅ Bot running...")
 
-    await app.initialize()
-    await app.start()
-    await app.bot.initialize()   # extra safety
-
-    # 🔥 THIS IS THE FIX (NO run_polling)
     await app.run_polling()
-    # keep alive
-    await asyncio.Event().wait()
