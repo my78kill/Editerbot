@@ -124,7 +124,6 @@ async def main():
     await app.bot.initialize()   # extra safety
 
     # 🔥 THIS IS THE FIX (NO run_polling)
-    await app.updater.start_polling()
-
+    await app.run_polling()
     # keep alive
     await asyncio.Event().wait()
