@@ -7,13 +7,16 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Bot is running!"
+    return "Bot is alive!"
 
-def run_bot():
-    asyncio.run(bot_main())
+def start_async_loop(loop):
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(bot_main())
 
-# ✅ thread me start karo (safe way)
-threading.Thread(target=run_bot, daemon=True).start()
+# ✅ Proper async thread
+loop = asyncio.new_event_loop()
+t = threading.Thread(target=start_async_loop, args=(loop,))
+t.start()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
