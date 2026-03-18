@@ -1,6 +1,6 @@
+import asyncio
 from flask import Flask
-import threading
-from bot import run_bot
+from bot import main as bot_main
 
 app = Flask(__name__)
 
@@ -8,10 +8,10 @@ app = Flask(__name__)
 def home():
     return "Bot is running!"
 
-def start_bot():
-    run_bot()
-
-threading.Thread(target=start_bot).start()
+# 🔥 IMPORTANT: background task start
+@app.before_serving
+async def startup():
+    asyncio.create_task(bot_main())
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
